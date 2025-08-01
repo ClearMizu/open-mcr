@@ -6,6 +6,7 @@ import file_handling
 from file_handling import parse_path_arg
 import grid_info as grid_i
 from process_input import process_input
+import extractor
 
 
 if __name__ == '__main__':
@@ -24,6 +25,9 @@ if __name__ == '__main__':
                         type=parse_path_arg)
     parser.add_argument('--formmap',
                         help='Form Arrangement Map CSV file path. If given, only one answer key may be provided.',
+                        type=parse_path_arg)
+    parser.add_argument('--extract-key',
+                        help='Extract answer key from a single image file path. This will create a CSV answer key.',
                         type=parse_path_arg)
     parser.add_argument('--variant',
                         default='75',
@@ -55,17 +59,46 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    image_paths = file_handling.filter_images(file_handling.list_file_paths(args.input_folder))
     output_folder = args.output_folder
     multi_answers_as_f = args.multiple
     empty_answers_as_g = args.empty
     keys_file = args.anskeys
     arrangement_file = args.formmap
+    extract_key_image = args.extract_key
     sort_results = args.sort
     output_mcta = args.mcta
     debug_mode_on = args.debug
     form_variant = grid_i.form_150q if args.variant == '150' else grid_i.form_75q
     files_timestamp = datetime.now().replace(microsecond=0) if not args.disable_timestamps else None
+
+    # Handle answer key extraction
+    if extract_key_image:
+        print(f"Extracting answer key from: {extract_key_image}")
+        extracted_key_path = extractor.extract_answer_key_from_image(
+            extract_key_image,
+            output_folder,
+            multi_answers_as_f,
+            empty_answers_as_g,
+            form_variant,
+            files_timestamp,
+            debug_mode_on
+        )
+        
+        if extracted_key_path:
+            print(f"Answer key extracted and saved to: {extracted_key_path}")
+            # Use the extracted key for processing if no other key file was specified
+            if not keys_file:
+                keys_file = extracted_key_path
+        else:
+            print("Failed to extract answer key from the specified image.")
+            sys.exit(1)
+
+    image_paths = file_handling.filter_images(file_handling.list_file_paths(args.input_folder))
+    
+    # Remove the answer key image from processing if it was extracted
+    if extract_key_image:
+        image_paths = [path for path in image_paths if path != extract_key_image]
+
     print(arrangement_file)
     process_input(image_paths,
                   output_folder,

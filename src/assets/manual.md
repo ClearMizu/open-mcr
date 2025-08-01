@@ -34,14 +34,33 @@ to be used.
 ### Creating Answer Keys
 
 If you would like to take advantage of the automatic grading feature of the
-software, you must provide it with one or more answer keys. To create an answer
-key, simply print a normal sheet and put `9999999999` in the **Student ID**
-field. Also, add a **Test Form Code** which will be used to match students' exams
-with the correct answer key, and finally fill in the exam with the correct
-answers.
+software, you have several options for providing answer keys:
 
-This is optional - you can choose to just have the software read the exams and
-not score them.
+#### Method 1: Traditional Answer Key Sheets
+Create an answer key by printing a normal sheet and putting `9999999999` in the 
+**Student ID** field. Also, add a **Test Form Code** which will be used to match 
+students' exams with the correct answer key, and finally fill in the exam with the 
+correct answers.
+
+#### Method 2: Answer Key Extraction (New!)
+You can now extract answers directly from any completed answer sheet without 
+needing special student ID numbers:
+
+1. **GUI Method**: In the main interface, check "Extract answer key from single 
+   image file" and select your completed answer sheet image. The software will 
+   automatically extract the answers and use them as the answer key.
+
+2. **Command Line Method**: Use the `--extract-key` option:
+   ```
+   python main.py --extract-key path/to/answer_sheet.jpg input_folder output_folder
+   ```
+
+The extracted answer key will be saved as a CSV file and automatically used for 
+scoring. The answer sheet image used for extraction will be excluded from regular 
+processing to avoid duplication.
+
+**Note**: Creating answer keys is optional - you can choose to just have the 
+software read the exams without scoring them.
 
 ### Reading Sheets
 

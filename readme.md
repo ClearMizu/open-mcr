@@ -89,6 +89,26 @@ Run the program by finding it in your Start menu after installing.
 For full operating instructions, see the [Manual](src/assets/manual.md) or
 click the <kbd>Open Help</kbd> button in the software.
 
+### Answer Key Extraction Feature
+
+OpenMCR now supports extracting answer keys directly from a single completed answer sheet image, eliminating the need to manually create CSV answer key files.
+
+#### GUI Usage
+1. In the main interface, check "Extract answer key from single image file"
+2. Select a completed answer sheet image file
+3. Continue with normal processing - the software will automatically extract the answers and use them as the answer key for scoring
+
+#### Command Line Usage
+Use the `--extract-key` option followed by the path to your answer sheet image:
+
+```bash
+python main.py --extract-key path/to/answer_sheet.jpg input_folder output_folder
+```
+
+The extracted answer key will be saved as a CSV file in your output folder and automatically used for scoring other sheets in the input folder.
+
+**Note**: When using answer key extraction, the specified answer sheet image will be excluded from the regular processing to avoid duplication.
+
 ## Feedback / Bug Reports
 
 To report a bug, request a new feature, or provide feedback, please

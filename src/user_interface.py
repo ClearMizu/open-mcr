@@ -401,6 +401,60 @@ class ArrangementMapPickerWidget():
         self.__arrangement_map_picker.disable()
 
 
+class AnswerKeyExtractorWidget():
+    file: tp.Optional[Path]
+    extract_mode: bool
+
+    def __init__(self,
+                 parent: PackTarget,
+                 on_change: tp.Optional[tp.Callable] = None):
+        self.__on_change = on_change
+
+        container = tk.Frame(parent)
+
+        create_and_pack_label(container,
+                              "Extract Answer Key from Single Image (Optional)",
+                              heading=True)
+        create_and_pack_label(
+            container,
+            "Select a single answer sheet image to extract answers and create an answer key CSV.\nThis will be used as the answer key for scoring all other sheets.\nLeave blank to use existing answer key methods."
+        )
+
+        self.__extract_mode_checkbox = CheckboxWidget(
+            container, "Extract answer key from single image file",
+            self.__on_extract_mode_update)
+        
+        self.__image_picker = FilePickerWidget(
+            container, [("Image Files", "*.jpg *.jpeg *.png *.bmp *.tiff *.tif")], self.__on_update)
+
+        # Initially disable the image picker
+        self.__image_picker.disable()
+
+        pack(container, fill=tk.X)
+
+        self.file = None
+        self.extract_mode = False
+
+    def __on_extract_mode_update(self):
+        self.extract_mode = self.__extract_mode_checkbox.value
+        if not self.extract_mode:
+            # Reset file selection when extract mode is turned off
+            self.file = None
+        self.__on_update()
+
+    def __on_update(self):
+        if self.extract_mode:
+            self.file = self.__image_picker.value
+        else:
+            self.file = None
+        if self.__on_change is not None:
+            self.__on_change()
+
+    def disable(self):
+        self.__extract_mode_checkbox.disable()
+        self.__image_picker.disable()
+
+
 class ProgressTrackerWidget:
     def __init__(self, parent: tk.Tk, maximum: int):
         self.maximum = maximum
@@ -450,6 +504,8 @@ class MainWindow:
     empty_answers_as_g: bool
     keys_file: tp.Optional[Path]
     arrangement_map: tp.Optional[Path]
+    extract_answer_key_image: tp.Optional[Path]
+    extract_answer_key_mode: bool
     sort_results: bool
     output_mcta: bool
     debug_mode: bool = False
@@ -473,6 +529,7 @@ class MainWindow:
         self.__input_folder_picker = InputFolderPickerWidget(
             app, self.__on_update)
         self.__answer_key_picker = AnswerKeyPickerWidget(app, self.__on_update)
+        self.__answer_key_extractor = AnswerKeyExtractorWidget(app, self.__on_update)
         self.__arrangement_map_picker = ArrangementMapPickerWidget(
             app, self.__on_update)
         self.__output_folder_picker = OutputFolderPickerWidget(
@@ -554,9 +611,23 @@ class MainWindow:
                 new_status += f"❌ Selected answer keys file is not valid.\n"
                 ok_to_submit = False
 
+        # Handle answer key extraction
+        self.extract_answer_key_mode = self.__answer_key_extractor.extract_mode
+        self.extract_answer_key_image = self.__answer_key_extractor.file
+        
+        if self.extract_answer_key_mode:
+            if self.extract_answer_key_image:
+                new_status += f"✔ Will extract answer key from '{self.extract_answer_key_image.name}'.\n"
+                # If extracting answer key, disable other key options
+                if self.keys_file or self.arrangement_map:
+                    new_status += "❗ Answer key extraction mode is enabled. Other key options will be ignored.\n"
+            else:
+                new_status += "❌ Answer key extraction mode is enabled but no image file is selected.\n"
+                ok_to_submit = False
+
         arrangement_map = self.__arrangement_map_picker.file
         self.arrangement_map = None
-        if arrangement_map:
+        if arrangement_map and not self.extract_answer_key_mode:
             if scoring.verify_answer_key_sheet(arrangement_map):
                 self.arrangement_map = arrangement_map
                 new_status += f"✔ Selected key arrangement file appears to be valid.\n"
@@ -601,6 +672,7 @@ class MainWindow:
         self.__input_folder_picker.disable()
         self.__output_folder_picker.disable()
         self.__answer_key_picker.disable()
+        self.__answer_key_extractor.disable()
         self.__arrangement_map_picker.disable()
 
     def __confirm(self):
@@ -640,3 +712,77 @@ class MainWindow:
 
     def create_and_pack_progress(self, maximum: int) -> ProgressTrackerWidget:
         return ProgressTrackerWidget(self.__app, maximum)
+
+    def create_extraction_window(self) -> 'ExtractionWindow':
+        """Create a new window for answer key extraction process."""
+        return ExtractionWindow()
+
+
+class ExtractionWindow:
+    """Window for handling answer key extraction process."""
+    
+    root: tk.Tk
+    cancelled: bool = False
+
+    def __init__(self):
+        app: tk.Tk = tk.Tk()
+        self.__app = app
+        app.title(f"{APP_NAME} - Extracting Answer Key")
+
+        if platform.system() == "Windows":
+            iconpath = str(Path(__file__).parent / "assets" / "icon.ico")
+            app.iconbitmap(iconpath)
+
+        app.protocol("WM_DELETE_WINDOW", self.__on_close)
+
+        # Status text
+        self.__status_text = tk.StringVar()
+        status = tk.Label(app, textvariable=self.__status_text, wraplength=500)
+        status.pack(fill=tk.X, expand=1, padx=XPADDING, pady=YPADDING)
+        
+        # Progress bar (simple, single step for extraction)
+        self.__progress = ttk.Progressbar(app, mode="indeterminate")
+        self.__progress.pack(fill=tk.X, padx=XPADDING, pady=YPADDING)
+
+        # Buttons frame
+        buttons_frame = tk.Frame(app)
+        
+        self.__close_button = pack(ttk.Button(buttons_frame,
+                                             text="Close",
+                                             command=self.__close_extraction,
+                                             state=tk.DISABLED),
+                                  padx=XPADDING,
+                                  pady=YPADDING,
+                                  side=tk.RIGHT)
+        pack(buttons_frame, fill=tk.X, expand=1)
+
+        self.__ready_to_close = tk.IntVar(name="Ready to Close Extraction")
+        
+    def set_status(self, status: str):
+        """Set the status text."""
+        self.__status_text.set(status)
+        self.__app.update()
+        self.__app.update_idletasks()
+        
+    def start_progress(self):
+        """Start the progress bar animation."""
+        self.__progress.start()
+        
+    def stop_progress(self):
+        """Stop the progress bar and enable close button."""
+        self.__progress.stop()
+        self.__close_button.configure(state=tk.NORMAL)
+        
+    def wait_for_close(self):
+        """Wait for the user to close the window."""
+        self.__app.wait_variable("Ready to Close Extraction")
+        
+    def __close_extraction(self):
+        """Handle extraction window close."""
+        self.__ready_to_close.set(1)
+        
+    def __on_close(self):
+        """Handle window close event."""
+        self.__app.destroy()
+        self.__ready_to_close.set(1)
+        self.cancelled = True
